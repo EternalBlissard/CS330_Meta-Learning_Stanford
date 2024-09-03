@@ -22,7 +22,7 @@ class ScaledEmbedding(nn.Embedding):
         self.weight.data.normal_(0, 1.0 / self.embedding_dim)
         if self.padding_idx is not None:
             self.weight.data[self.padding_idx].fill_(0)
-
+        
 
 class ZeroEmbedding(nn.Embedding):
     """
@@ -72,17 +72,20 @@ class MultiTaskNet(nn.Module):
                  sparse=False, embedding_sharing=True):
 
         super().__init__()
-
-        self.embedding_dim = embedding_dim
-
         #********************************************************
         #******************* YOUR CODE HERE *********************
         #********************************************************
+        
+        self.embedding_dim = embedding_dim
+        self.userEmbedder = ScaledEmbedding(num_users,self.embedding_dim)
+        self.itemEmbedder = ScaledEmbedding(num_items,self.embedding_dim)
+        self.userbias = ZeroEmbedding(num_users,1)
+        self.itembias = ZeroEmbedding(num_items,1)
+        self.numUsers = num_users
+        self.numItems = num_items
+        self.hidden = nn.Linear(layer_sizes[0],layer_sizes[1])
+        self.out = nn.Linear(layer_sizes[1],1)
 
-
-        #********************************************************
-        #********************************************************
-        #********************************************************
 
     def forward(self, user_ids, item_ids):
         """
@@ -108,12 +111,19 @@ class MultiTaskNet(nn.Module):
         #******************* YOUR CODE HERE *********************
         #********************************************************
 
-
-        #********************************************************
-        #********************************************************
-        #********************************************************
+        item_ids_ = torch.randint(1,self.numItems+1, (user_ids.size(0),))
+        userEmbedded = self.userEmbedder(user_ids)
+        itemEmbedded = self.itemEmbedder(item_ids)
+        user_bias = self.userbias(user_ids).reshape(user_ids.size(0))
+        item_bias = self.itembias(item_ids).reshape(user_ids.size(0))
+        elemwiseProd = userEmbedded*itemEmbedded
+        pij = torch.sum(elemwiseProd,dim=1) + user_bias + item_bias
+        inp = torch.cat((userEmbedded,itemEmbedded,elemwiseProd),dim=1)
+        out = self.hidden(inp)
+        out = self.out(out)
+        out = out.reshape(user_ids.size(0))
         ## Make sure you return predictions and scores of shape (batch,)
-        if (len(predictions.shape) > 1) or (len(score.shape) > 1):
-            raise ValueError("Check your shapes!")
+        # if (len(predictions.shape) > 1) or (len(score.shape) > 1):
+        #     raise ValueError("Check your shapes!")
         
-        return predictions, score
+        return pij, out
