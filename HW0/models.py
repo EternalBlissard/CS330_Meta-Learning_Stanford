@@ -85,7 +85,14 @@ class MultiTaskNet(nn.Module):
         self.numItems = num_items
         self.hidden = nn.Linear(layer_sizes[0],layer_sizes[1])
         self.out = nn.Linear(layer_sizes[1],1)
-
+        self.relu = nn.ReLU()
+        if(embedding_sharing):
+            self.userEmbedderReg = self.userEmbedder
+            self.itemEmbedderReg = self.itemEmbedder
+        else:
+            self.userEmbedderReg = ScaledEmbedding(num_users,self.embedding_dim)
+            self.itemEmbedderReg = ScaledEmbedding(num_items,self.embedding_dim)
+        
 
     def forward(self, user_ids, item_ids):
         """
@@ -114,12 +121,16 @@ class MultiTaskNet(nn.Module):
         item_ids_ = torch.randint(1,self.numItems+1, (user_ids.size(0),))
         userEmbedded = self.userEmbedder(user_ids)
         itemEmbedded = self.itemEmbedder(item_ids)
+        userEmbeddedReg = self.userEmbedderReg(user_ids)
+        itemEmbeddedReg = self.itemEmbedderReg(item_ids)
         user_bias = self.userbias(user_ids).reshape(user_ids.size(0))
         item_bias = self.itembias(item_ids).reshape(user_ids.size(0))
         elemwiseProd = userEmbedded*itemEmbedded
+        elemwiseProdReg = userEmbeddedReg*itemEmbeddedReg
         pij = torch.sum(elemwiseProd,dim=1) + user_bias + item_bias
         inp = torch.cat((userEmbedded,itemEmbedded,elemwiseProd),dim=1)
         out = self.hidden(inp)
+        out = self.relu(out)
         out = self.out(out)
         out = out.reshape(user_ids.size(0))
         ## Make sure you return predictions and scores of shape (batch,)
